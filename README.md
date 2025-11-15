@@ -1,13 +1,9 @@
 # RoboDialogues
 Robos in Movies
-# AI Robot Dialogues Extraction
-
-This project extracts dialogues spoken by AI or robotic characters from the Cornell Movie Dialogues corpus.
 
 ## How to Use
 - Clone the repository.
 - Run `dialog.py` to extract the dialogues and store them in an SQLite database.
-# RoboDialogues Project
 
 ## Description
 This project extracts dialogues for AI/robot characters from movies, stores them in a database, and offers easy access to these dialogues for analysis.
