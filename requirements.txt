@@ -1,0 +1,10 @@
+You will need to download convokit following [these](https://convokit.cornell.edu/documentation/install.html) instructions.
+We'll also need the Cornell Movie-Dialogs Corpus that you can download directly with Convokit by pasting the following in a .py file:
+
+```
+from convokit import Corpus, download
+corpus = Corpus(filename=download("movie-corpus"))
+```
+
+More details [here](https://convokit.cornell.edu/documentation/movie.html)
+
