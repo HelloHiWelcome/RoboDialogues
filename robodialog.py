@@ -1,24 +1,38 @@
 import json
 import sqlite3
 
-# AI/robot characters dictionary with their respective speaker IDs and movie IDs
+# Define the robot characters and their speaker IDs and movie IDs
 robot_characters = {
-    "HAL 9000": {"speaker_id": "u56", "movie_id": "m3"},
-    "Bishop": {"speaker_id": "u229", "movie_id": "m15"},
-    "Simone/Viktor": {"speaker_id": "u2783", "movie_id": "m181"},
-    "Data": {"speaker_id": "u2899", "movie_id": "m191"},
-    "Borg Queen": {"speaker_id": "u2992", "movie_id": "m196"},
-    "Data": {"speaker_id": "u2993", "movie_id": "m196"},
-    "Data": {"speaker_id": "u3025", "movie_id": "m198"},
-    "C-3PO": {"speaker_id": "u5103", "movie_id": "m337"},
-    "Terminator": {"speaker_id": "u8077", "movie_id": "m547"},
-    "Terminator": {"speaker_id": "u8098", "movie_id": "m549"},
-    "Leeloo": {"speaker_id": "u85", "movie_id": "m5"},
+    "HAL 9000": {"speaker_ids": ["u56"], "movie_ids": ["m3"]},
+    "Bishop": {"speaker_ids": ["u229"], "movie_ids": ["m15"]},
+    "Simone/Viktor": {"speaker_ids": ["u2783"], "movie_ids": ["m181"]},
+    
+    # Merge Data across all movies
+    "Data": {
+        "speaker_ids": ["u2899", "u2993", "u3025"], 
+        "movie_ids": ["m191", "m196", "m198"]
+    },
+    
+    "Borg Queen": {"speaker_ids": ["u2992"], "movie_ids": ["m196"]},
+    
+    # Consolidate C-3PO for all appearances
+    "C-3PO": {
+        "speaker_ids": ["u5103", "u7826", "u7251"], 
+        "movie_ids": ["m337", "m529", "m489"]
+    },
+    
+    # Consolidate Terminator for both movies
+    "Terminator": {
+        "speaker_ids": ["u8077", "u8098"], 
+        "movie_ids": ["m547", "m549"]
+    },
+    
+    "Leeloo": {"speaker_ids": ["u85"], "movie_ids": ["m5"]},
     
     # New AI characters from The Matrix
-    "Agent Smith": {"speaker_id": "u6517", "movie_id": "m433"},
-    "Agent Jones": {"speaker_id": "u6516", "movie_id": "m433"},
-    "Oracle": {"speaker_id": "u6524", "movie_id": "m433"}
+    "Agent Smith": {"speaker_ids": ["u6517"], "movie_ids": ["m433"]},
+    "Agent Jones": {"speaker_ids": ["u6516"], "movie_ids": ["m433"]},
+    "Oracle": {"speaker_ids": ["u6524"], "movie_ids": ["m433"]}
 }
 
 # Movie ID dictionary to map movie IDs to movie names
@@ -35,8 +49,6 @@ movie_id_dict = {
     "m547": "Terminator 2: Judgment Day",
     "m549": "The Terminator",
     "m5": "The Fifth Element",
-    
-    # Add The Matrix movie
     "m433": "The Matrix"
 }
 
@@ -56,56 +68,70 @@ with open(r'C:\Users\Hp\.convokit\saved-corpora\movie-corpus\utterances.jsonl', 
 conn = sqlite3.connect('RobotDialogs.db')
 cursor = conn.cursor()
 
-# Create a table for storing the dialogues (movie_name, character_name, dialogue)
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS dialogues (
-    movie_name TEXT,
-    character_name TEXT,
-    dialogue TEXT
+# Clear the previous dialogues (if any) before inserting new ones
+cursor.execute("DELETE FROM dialogues;")
+conn.commit()
+
+# Reset the auto-increment ID counter
+cursor.execute("DELETE FROM sqlite_sequence WHERE name='dialogues';")
+conn.commit()
+
+# Create a table for storing the dialogues (movie_name, character_name, dialogue, synopsis)
+cursor.execute(''' 
+CREATE TABLE IF NOT EXISTS dialogues ( 
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    movie_name TEXT, 
+    character_name TEXT, 
+    dialogue TEXT, 
+    synopsis TEXT 
 )
 ''')
 
-# Function to insert dialogues into the database
+# Insert dialogues into the database
 def insert_dialogue(movie_name, character_name, dialogue):
-    cursor.execute('''
-    INSERT INTO dialogues (movie_name, character_name, dialogue)
-    VALUES (?, ?, ?)
-    ''', (movie_name, character_name, dialogue))
+    cursor.execute("""
+        INSERT INTO dialogues (movie_name, character_name, dialogue)
+        VALUES (?, ?, ?)
+    """, (movie_name, character_name, dialogue))
     conn.commit()
 
 # Process the utterances data and filter for the AI/robot characters
 inserted_count = 0
+data_to_insert = {}
 
-# Now process all the utterances
+# Read the utterances.jsonl file
 for utterance in utterances_data:
     speaker_id = utterance['speaker']
     dialogue = utterance['text']
-    conversation_id = utterance['conversation_id']
-    
-    # Get the movie ID from the utterance's metadata and map it to the movie name
     movie_id = utterance['meta']['movie_id']
-    movie_name = movie_id_dict.get(movie_id, 'Unknown Movie')
+    
+    # Only process the relevant movies (those in relevant_movie_ids)
+    if movie_id not in movie_id_dict:
+        continue  # Skip this utterance if the movie isn't in the relevant list
+    
+    # Ensure we get the correct movie name by looking up the movie_id in the movie_id_dict
+    movie_name = movie_id_dict.get(movie_id)
+    
+    if not movie_name:
+        print(f"Warning: Movie ID {movie_id} is not in the movie_id_dict. Skipping this entry.")
+        continue  # Skip this dialogue if no movie name is found for the movie_id
     
     # Check if this utterance corresponds to an AI/robot character
     for character_name, data in robot_characters.items():
-        if data['speaker_id'] == speaker_id and data['movie_id'] == movie_id:
-            # Check if movie_name is correctly assigned
-            if movie_name == 'Unknown Movie':
-                # If movie name is still 'Unknown Movie', check if it is in conversations_data
-                for conversation in conversations_data.values():
-                    if conversation['meta']['movie_idx'] == movie_id:
-                        movie_name = conversation['meta'].get('movie_name', 'Unknown Movie')
-                        break
-            
-            # Insert the dialogue into the database if the movie name is found
-            if movie_name != 'Unknown Movie':
-                insert_dialogue(movie_name, character_name, dialogue)
-                inserted_count += 1
+        if speaker_id in data['speaker_ids'] and movie_id in data['movie_ids']:
+            # Collect data for bulk insert if movie name is found
+            if character_name not in data_to_insert:
+                data_to_insert[character_name] = []
+            data_to_insert[character_name].append((movie_name, dialogue))
+
+# Insert dialogues for all relevant character names
+for character_name, dialogues in data_to_insert.items():
+    for movie_name, dialogue in dialogues:
+        insert_dialogue(movie_name, character_name, dialogue)
+        inserted_count += 1
 
 # Output how many dialogues were inserted
 print(f"\nInserted {inserted_count} new dialogues.")
 
 # Close the database connection
 conn.close()
-
-print("Dialogues for AI/robot characters have been successfully extracted and inserted into the RobotDialogs.db database.")
