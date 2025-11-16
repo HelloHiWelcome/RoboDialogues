@@ -1,2 +1,0 @@
-convokit==3.1.0
-sqlite3
